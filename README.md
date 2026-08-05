@@ -188,6 +188,7 @@ scripts/
                        #   --max-videos 0 fetches the whole channel; runs resume
   fetch_books.py       # Gutenberg/URL/local files → PDF·EPUB·TXT → clean book text
   fetch_podcast.py     # iTunes lookup → RSS → serialized-audiobook detection → whisper
+  sync-upstream.sh     # report (never apply) upstream changes + real conflict check
 examples/
   alex-hormozi/        # real persona built by this pipeline
 ```
@@ -197,8 +198,18 @@ examples/
 This fork tracks the original. To pull Colton's later changes into it:
 
 ```bash
-git remote add upstream https://github.com/coltonjosephdean-rgb/talk-to-anyone.git  # once
-git fetch upstream
+./scripts/sync-upstream.sh
+```
+
+It adds the `upstream` remote if missing, fetches, and reports what Colton has added,
+which files he touched, and — using `git merge-tree`, entirely in memory — whether
+merging would actually conflict. It never merges: your working tree is untouched and
+there is nothing to unwind. Exit codes are `0` up to date, `10` updates available and
+clean, `11` updates available with conflicts.
+
+Then merge when you're ready:
+
+```bash
 git merge upstream/main        # resolve conflicts, then push
 ```
 
