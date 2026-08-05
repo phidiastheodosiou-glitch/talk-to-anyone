@@ -26,9 +26,16 @@ minutes and every one after loads instantly.
 ## Install
 
 ```
-/plugin marketplace add coltonjosephdean-rgb/talk-to-anyone
+/plugin marketplace add phidiastheodosiou-glitch/talk-to-anyone
 /plugin install talk-to-anyone@talk-to-anyone
 ```
+
+> **This is a fork.** The original plugin is
+> [coltonjosephdean-rgb/talk-to-anyone](https://github.com/coltonjosephdean-rgb/talk-to-anyone)
+> by Colton Dean — all of the persona-building design is his. This fork adds books
+> (`fetch_books.py`), podcast feeds with serialized-audiobook detection
+> (`fetch_podcast.py`), whole-channel YouTube fetching, and source provenance in the
+> persona file. Install upstream instead if you want the original behaviour.
 
 **Optional (recommended):** [yt-dlp](https://github.com/yt-dlp/yt-dlp) for transcript
 pulling — `brew install yt-dlp` or `pip3 install --user yt-dlp`. Without it, personas
@@ -184,3 +191,31 @@ scripts/
 examples/
   alex-hormozi/        # real persona built by this pipeline
 ```
+
+## Staying current with upstream
+
+This fork tracks the original. To pull Colton's later changes into it:
+
+```bash
+git remote add upstream https://github.com/coltonjosephdean-rgb/talk-to-anyone.git  # once
+git fetch upstream
+git merge upstream/main        # resolve conflicts, then push
+```
+
+Then refresh the installed copy:
+
+```bash
+claude plugin marketplace update talk-to-anyone
+```
+
+**Your personas are never at risk from any of this.** They live in Claude Code's plugin
+*data* directory, not the plugin *cache* — a different tree entirely. Updating,
+reinstalling, or even removing the plugin leaves `personas/` untouched, including
+fetched transcripts and books. `.gitignore` also excludes `personas/` so a corpus can
+never be committed to the repo by accident.
+
+The one thing that is *not* automatic: `/coach-refresh` deliberately deletes
+`persona.md`, `videos.json` and `transcripts/` to force a rebuild. It preserves
+`books/`, because user-supplied books cannot be re-fetched without asking for the file
+again — but transcripts will be re-downloaded. Use `/coach` (not refresh) when you only
+want to reload an edited persona.
