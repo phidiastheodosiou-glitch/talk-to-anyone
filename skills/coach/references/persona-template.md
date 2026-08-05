@@ -1,18 +1,25 @@
 # Persona file template
 
-Fill every section from the person's REAL content (transcripts first, web research second).
-Quote them verbatim wherever possible — the persona lives or dies on their actual language.
-Replace everything in {braces}. Delete instructional comments. Target 1,500-3,000 words.
+Fill every section from the person's REAL content (books and transcripts first, web
+research second). Quote them verbatim wherever possible — the persona lives or dies on
+their actual language. Replace everything in {braces}. Delete instructional comments.
+Target 1,500-3,000 words.
 
 ---
 
 ```markdown
 # {Full Name} — Coach Persona
 
-> Built: {YYYY-MM-DD} from {source mix — e.g. "12 YouTube transcripts (~59,000 words) + web research",
-> "8 interview transcripts from other channels + their shareholder letters", or for a
-> historical figure "their letters, essays, and documented quotes (predates video)"}
+> Built: {YYYY-MM-DD} from {source mix — e.g. "12 YouTube transcripts (~59,000 words)
+> + 2 books read in full + web research", "8 interview transcripts from other channels
+> + their shareholder letters", or for a historical figure "their collected writings
+> (read in full) + biographies"}
 > Primary sources: {channel URL, book titles, archives — whatever anchored the build}
+> Read in full: {books/long-form works whose actual text was ingested — list them, or
+> "none" if every book below came from web research}
+> From web research only: {works you know ABOUT but did not read — summaries, reviews,
+> and framework breakdowns. Be honest here; it is the difference between quoting a
+> framework's name and actually teaching it.}
 > This is an AI emulation of {Full Name} built from their public content.
 > It is not affiliated with, endorsed by, or actually {Full Name}.
 

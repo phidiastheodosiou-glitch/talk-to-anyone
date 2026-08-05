@@ -14,8 +14,16 @@ first build was thin). If `$ARGUMENTS` is empty, ask who to refresh.
    (`${CLAUDE_PLUGIN_DATA}/personas` primary, `~/.claude/talk-to-anyone/personas`
    legacy fallback) and the person's slug.
 2. Wherever `<personas>/<slug>/` exists (check both locations), delete only its
-   `persona.md`, `videos.json`, and `transcripts/` contents — that's the entire cache
-   for this person.
+   `persona.md`, `videos.json`, and `transcripts/` contents — that's the re-derivable
+   cache for this person.
+
+   **Keep `books/` and `books.json`.** Transcripts and web research re-fetch for free,
+   but a book the user supplied from their own copy cannot be re-obtained without
+   asking them for the file again. Preserve those entries and re-read them in Step 3.5
+   instead of re-extracting. Do drop `books/` entries whose `books.json` `source` is
+   `gutenberg` (free to re-pull) if you want genuinely fresh text. If the user
+   explicitly asks for a total wipe, say what will be lost and confirm before deleting
+   user-supplied books.
 3. Run the full `/coach` build for the name: read
    `${CLAUDE_PLUGIN_ROOT}/skills/coach/SKILL.md` and follow it from Step 1 (the cache
    check will miss, forcing fresh research and transcript pulls).

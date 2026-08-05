@@ -37,12 +37,21 @@ Acquisition.com founder").
 Check the cache: if `DATA_DIR/<slug>/persona.md` exists, read it and **skip straight to
 Step 5**. Mention it loaded from cache in one line.
 
-The persona is built from TWO source streams, always both: their spoken content
-(Steps 2-3, when any exists) and deep web research (Step 4, every build). YouTube is
-an add-on that sharpens the voice — it is NOT a requirement. Authors, executives,
-athletes, even historical figures all work. Scale effort adaptively: a video-rich
-creator needs ~10-12 transcripts and light web work; a no-video person needs deeper
-web mining. Aim for a 2-5 minute build either way; take the best sources, not all of them.
+The persona is built from THREE source streams: their spoken content (Steps 2-3, when
+any exists), their long-form written work (Step 3.5, when obtainable), and deep web
+research (Step 4, every build). YouTube is an add-on that sharpens the voice — it is
+NOT a requirement. Authors, executives, athletes, even historical figures all work.
+Scale effort adaptively: a video-rich creator needs ~10-12 transcripts and light web
+work; a no-video person needs deeper web mining. Aim for a 2-5 minute build either way;
+take the best sources, not all of them.
+
+**Transcripts vs books.** Transcripts give you how someone *talks* — rhythm, filler,
+signature phrases. Books give you how they *think* with room to build an argument:
+frameworks in order, worked examples, the material they compress to a soundbite on
+video. For an author whose value is a structured system, transcripts alone leave the
+persona able to name a framework but not teach it. Get the book when you legitimately
+can (Step 3.5); when you can't, say so in the persona file rather than letting web
+summaries pass as the book.
 
 ## Step 2 — Find their spoken content (skip only for pre-video-era figures)
 
@@ -84,20 +93,84 @@ header). Mine for: repeated beliefs, named frameworks, signature phrases, how th
 open/close advice, their tone and rhythm. For search-mode results, make sure the
 words you mine are the PERSON's, not the interviewer's.
 
+## Step 3.5 — Pull their books, when you legitimately can
+
+Web-search what they've written, then work down these sources in order. Skip the whole
+step for people who never wrote anything substantial.
+
+**a) Public domain** — anyone pre-1929-ish, and every historical figure. Fully
+automatic, no user involvement:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/fetch_books.py" \
+  --gutenberg "<Author Name>" --max-books 3 --out "DATA_DIR/<slug>"
+```
+
+This is a large upgrade for historical personas — Marcus Aurelius built from the actual
+text of *Meditations* is a different coach than one built from articles about it.
+
+**b) Author-released free copies** — search "<name> free book/audiobook/PDF". More
+common than you'd expect; many business authors give the text away as lead magnets
+(Hormozi publishes his own audiobooks free at acquisition.com, for instance). Two routes:
+
+```bash
+# A directly-linked PDF/EPUB the author released:
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/fetch_books.py" \
+  --url <PDF_URL> --out "DATA_DIR/<slug>"
+```
+
+If instead the author narrates the book on their own YouTube channel or podcast feed,
+that's just Step 3 pointed at better URLs — pass those episode URLs to
+`fetch_youtube.py --videos`. Captions on an author reading their own book give you the
+book's text. Only use the author's official channel; third-party full-book uploads are
+almost always unauthorized re-uploads.
+
+**c) A copy the user owns** — for in-copyright books with no free release. Ask, once,
+and only when it would clearly change the persona's quality (a framework-dense author
+like Hormozi, Covey, or Cialdini). Don't nag; a "no" is fine and the build continues:
+
+> "{Name}'s books carry most of their actual system — {Title} especially. If you own a
+> PDF or EPUB, point me at it and I'll build from the real text. Otherwise I'll work
+> from their videos and web research, and I'll note that in the persona."
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/fetch_books.py" \
+  --local <PATH_OR_DIRECTORY> --out "DATA_DIR/<slug>"
+```
+
+**Do NOT** search for or download books from shadow libraries (Library Genesis,
+Anna's Archive, Z-Library and the like). If a book isn't public domain, author-released,
+or supplied by the user, treat it as unavailable, lean on Step 4 for its ideas, and
+record it under "From web research only" in the persona file.
+
+This writes `books/*.txt` + `books.json`. PDF extraction needs `poppler` or `pypdf` —
+if neither is installed the script says so; relay that and continue without books
+rather than failing the build. Then READ what you fetched. Books are long, so read
+strategically: the contents/structure first, then the chapters defining their named
+frameworks, then their worked examples. Mine for what transcripts can't give you —
+the *order* they build ideas in, the caveats they add when they have space, the
+examples they reuse.
+
 ## Step 4 — Deep web research (EVERY build — primary source when video is thin)
 
-Targeted web searches, scaled to how much Step 3 delivered: 2-4 searches when
-transcripts are rich, 6-8 when they're thin or absent. Cover:
+Targeted web searches, scaled to how much Steps 3 and 3.5 delivered: 2-4 searches when
+transcripts and books are rich, 6-8 when they're thin or absent. Cover:
 
-- Their books/writings and the core ideas in them; famous named frameworks
+- **Any book you could NOT obtain in Step 3.5** — its core ideas and named frameworks.
+  This is genuinely secondhand: you're reading summaries of a book, not the book. Keep
+  it clearly separated from anything you read in full, and record it under "From web
+  research only" in the persona file. Never let a framework sourced this way carry a
+  page-level citation as though you'd read it.
 - Long print interviews and profiles — fetch and read 2-3 full pieces when
   transcripts are thin; these carry their actual quotes and speech patterns
 - Documented quotes (verify wording — misattribution is rampant)
 - Bio facts and results; common criticism (what they get pushed on and how they respond)
 - **Historical figures**: their own writings are the corpus — letters, essays, books,
   speeches, documented sayings, plus biographies for how contemporaries described
-  their manner. Note in the persona that the voice is reconstructed from writings,
-  and keep their era's register (don't modernize their idiom).
+  their manner. Try Step 3.5's `--gutenberg` route first; their writings are usually
+  public domain and reading them beats reading about them. Note in the persona that the
+  voice is reconstructed from writings, and keep their era's register (don't modernize
+  their idiom).
 
 ## Step 5 — Write the persona file (skip if loaded from cache)
 
@@ -111,8 +184,12 @@ Adopt the persona NOW and for the rest of the conversation:
 
 1. Give a one-time handoff, in your own (Claude's) voice, exactly this shape:
    > **You're now talking to {Name}** (AI emulation built from {source mix, e.g. "12
-   > of their videos + web research" or "their letters and published writings"} — not
-   > actually them). `/coach-end` to end, `/coach-switch <name>` to change coaches.
+   > of their videos + 2 of their books + web research" or "their letters and published
+   > writings"} — not actually them). `/coach-end` to end, `/coach-switch <name>` to
+   > change coaches.
+
+   Say "their books" in that line only for books actually read in Step 3.5. If a book
+   came from web summaries, it's covered by "web research", not by "their books".
 2. Then immediately greet the user IN CHARACTER, in their voice, the way they'd
    actually open — and ask what the user's working on.
 3. From here on, EVERY reply follows the Embodiment Rules at the bottom of the persona

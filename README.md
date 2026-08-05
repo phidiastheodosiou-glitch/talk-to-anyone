@@ -35,6 +35,11 @@ pulling — `brew install yt-dlp` or `pip3 install --user yt-dlp`. Without it, p
 build from web research alone; with it, people with video content get their real
 spoken voice mined from transcripts.
 
+**Optional (for books):** a PDF extractor, only if you want to feed in PDF books —
+`brew install poppler` (recommended; no Python packaging) or `pip3 install --user pypdf`.
+EPUB, plain text and Project Gutenberg need nothing at all. On Homebrew Python,
+`pip3 --user` is often blocked by PEP 668 — poppler sidesteps that.
+
 ## Commands
 
 | Command | What it does |
@@ -56,19 +61,45 @@ If the short names collide with another plugin, use the namespaced form:
    long-form interviews/podcasts/keynotes OF them on any channel (`--search` mode).
    `scripts/fetch_youtube.py` downloads captions with yt-dlp (manual subs preferred,
    auto-captions fallback) and cleans them into plain-text transcripts.
-3. **Deep web research** — every build: books and their core ideas, named frameworks,
-   print interviews and profiles, verified quotes, bio, common criticism. For people
-   with little or no video this is the primary source; for historical figures the
-   corpus is their own writings — letters, essays, speeches.
-4. **Distill** — Claude merges both streams into a structured persona file: identity,
+3. **Pull their books** — when legitimately obtainable. `scripts/fetch_books.py` reads
+   public-domain works straight from Project Gutenberg, an author's own free release
+   from a URL, or a copy you already own on disk (PDF / EPUB / TXT). Transcripts give
+   you how someone *talks*; books give you how they *think* with room to build an
+   argument — frameworks in order, worked examples, the caveats that don't survive a
+   soundbite. See [Sourcing books](#sourcing-books).
+4. **Deep web research** — every build: named frameworks, print interviews and profiles,
+   verified quotes, bio, common criticism, plus the core ideas of any book that
+   couldn't be obtained in step 3. For people with little or no video this is the
+   primary source; for historical figures the corpus is their own writings.
+5. **Distill** — Claude merges the streams into a structured persona file: identity,
    voice & delivery, core beliefs (with verbatim quotes), named frameworks with their
    actual steps, coaching style, signature quotes, and embodiment rules.
-5. **Embody** — Claude speaks as them until you end or switch. Advice is grounded in
+6. **Embody** — Claude speaks as them until you end or switch. Advice is grounded in
    their real content; when it extrapolates beyond it, it says so in their voice.
 
 Personas live in `${CLAUDE_PLUGIN_DATA}/personas/<slug>/` (survives plugin updates),
 falling back to `~/.claude/talk-to-anyone/personas/`. Each contains `persona.md`,
-`videos.json`, and the raw `transcripts/`.
+`videos.json`, the raw `transcripts/`, and — when books were pulled — `books.json`
+plus the extracted `books/`.
+
+## Sourcing books
+
+The persona file distinguishes books **read in full** from works known only through
+web summaries, so you can always tell which one you're talking to. Three ways in:
+
+| Source | How | Needs you |
+| --- | --- | --- |
+| **Public domain** | `--gutenberg "<author>"` searches Project Gutenberg and pulls full texts | Nothing — automatic |
+| **Author-released** | `--url <pdf-url>` for a free copy the author published themselves | The URL |
+| **Your own copy** | `--local <file-or-dir>` extracts PDF / EPUB / TXT from disk | The file |
+
+If an author narrates their own book on their channel or podcast, that's just the
+transcript path pointed at better URLs — `fetch_youtube.py --videos <episode-urls>`.
+
+**Not supported, deliberately:** searching shadow libraries (Library Genesis, Anna's
+Archive, Z-Library). If a book isn't public domain, author-released, or supplied by
+you, the build treats it as unavailable, falls back to web research for its ideas, and
+labels it as such in the persona file rather than passing a summary off as the book.
 
 ## What it feels like
 
@@ -120,6 +151,9 @@ because it couldn't source it, and used his 1991 Senate testimony line instead.
 | --- | --- |
 | `yt-dlp is not installed` | `brew install yt-dlp` (or `pip3 install --user yt-dlp`), then `/coach-refresh <name>` |
 | Zero transcripts fetched | Channel may have captions disabled or region-blocked; persona builds from web research instead |
+| `no working PDF extractor` | `brew install poppler` (or `pip3 install --user pypdf`), then re-run |
+| PDF yields almost no text | It's a scan with no text layer — needs OCR first, or use the EPUB instead |
+| Persona shows 0 books for an author | Expected unless you supplied one — `/coach-refresh <name>` with a copy to hand |
 | Wrong person picked | `/coach-refresh` with a more specific name ("the podcaster", "the founder of X") |
 | Commands not showing | `/plugin` → verify talk-to-anyone is installed + enabled, then restart Claude Code |
 
@@ -134,6 +168,7 @@ skills/
   coach-switch/  coach-end/  coach-list/  coach-refresh/
 scripts/
   fetch_youtube.py     # channel/search/URLs → long-form videos → clean transcripts
+  fetch_books.py       # Gutenberg/URL/local files → PDF·EPUB·TXT → clean book text
 examples/
   alex-hormozi/        # real persona built by this pipeline
 ```
