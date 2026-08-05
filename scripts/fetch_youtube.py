@@ -101,8 +101,7 @@ def list_popular_videos(yt_dlp: str, channel: str, max_videos: int) -> list[dict
                 yt_dlp,
                 "--flat-playlist",
                 "--dump-json",
-                "--playlist-end",
-                str(max_videos * 2),  # overshoot; shorts/live get filtered below
+                *(["--playlist-end", str(max_videos * 2)] if max_videos else []),
                 url,
             ]
         )
@@ -129,7 +128,7 @@ def list_popular_videos(yt_dlp: str, channel: str, max_videos: int) -> list[dict
                     "view_count": entry.get("view_count"),
                 }
             )
-            if len(videos) >= max_videos:
+            if max_videos and len(videos) >= max_videos:
                 break
         if videos:
             return videos
@@ -144,7 +143,7 @@ def search_videos(yt_dlp: str, query: str, max_videos: int) -> list[dict]:
             yt_dlp,
             "--flat-playlist",
             "--dump-json",
-            f"ytsearch{max_videos * 3}:{query}",  # overshoot; shorts/short clips get filtered
+            f"ytsearch{(max_videos * 3) if max_videos else 500}:{query}",  # overshoot; shorts filtered below
         ]
     )
     videos = []
@@ -166,7 +165,7 @@ def search_videos(yt_dlp: str, query: str, max_videos: int) -> list[dict]:
                 "channel": entry.get("channel") or entry.get("uploader"),
             }
         )
-        if len(videos) >= max_videos:
+        if max_videos and len(videos) >= max_videos:
             break
     return videos
 
@@ -257,14 +256,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--channel", help="Channel URL or @handle (e.g. https://www.youtube.com/@AlexHormozi)")
     parser.add_argument("--search", help="YouTube search query for long-form videos OF the person (e.g. \"Warren Buffett interview\") — for people with no channel of their own")
     parser.add_argument("--videos", nargs="*", default=[], help="Explicit video URLs to fetch instead of / in addition to the channel's popular videos")
-    parser.add_argument("--max-videos", type=int, default=12, help="How many videos to pull per source (default 12)")
+    parser.add_argument("--max-videos", type=int, default=12,
+                        help="How many videos to pull per source (default 12; use 0 for ALL — "
+                             "expect ~1-2 hours on a large channel, and see --refetch)")
+    parser.add_argument("--refetch", action="store_true",
+                        help="Re-download transcripts that are already on disk (default: skip them, "
+                             "so re-running only picks up new uploads and an interrupted run resumes)")
     parser.add_argument("--out", required=True, help="Output directory (transcripts/ and videos.json are written here)")
     args = parser.parse_args()
     if not args.channel and not args.videos and not args.search:
         parser.error("provide --channel, --search, and/or --videos")
-    if args.max_videos < 1:
-        parser.error("--max-videos must be >= 1")
+    if args.max_videos < 0:
+        parser.error("--max-videos must be >= 0 (0 means no limit)")
     return args
+
+
+def existing_video_ids(transcripts_dir: Path) -> set[str]:
+    """Video IDs already on disk. Filenames end '-<11-char id>.txt'."""
+    ids = set()
+    for path in transcripts_dir.glob("*.txt"):
+        match = re.search(r"-([A-Za-z0-9_-]{11})$", path.stem)
+        if match:
+            ids.add(match.group(1))
+    return ids
 
 
 def main() -> None:
@@ -295,6 +309,17 @@ def main() -> None:
     if not videos:
         fail("no videos to fetch", 1)
 
+    # Skip what's already on disk. On a 500-video channel this is what makes the
+    # fetch resumable and makes a re-run cost only the new uploads.
+    known = set() if args.refetch else existing_video_ids(transcripts_dir)
+    if known:
+        before = len(videos)
+        videos = [v for v in videos if v["id"] not in known]
+        print(f"{len(known)} already on disk; {before - len(videos)} skipped, {len(videos)} to fetch")
+    if not videos:
+        print("Nothing new to fetch.")
+        return
+
     fetched = []
     for index, video in enumerate(videos, 1):
         title = video.get("title") or video["id"]
@@ -316,7 +341,20 @@ def main() -> None:
         if index < len(videos):
             time.sleep(SLEEP_BETWEEN_VIDEOS_SECONDS)
 
-    (out_dir / "videos.json").write_text(json.dumps(fetched, indent=2) + "\n", encoding="utf-8")
+    # Merge, never clobber: an incremental run must not erase earlier entries.
+    index_path = out_dir / "videos.json"
+    merged = {}
+    if index_path.exists():
+        try:
+            for entry in json.loads(index_path.read_text(encoding="utf-8")):
+                path = entry.get("transcript_file")
+                if path and (out_dir / path).exists():
+                    merged[entry.get("id") or path] = entry
+        except (json.JSONDecodeError, TypeError):
+            print("WARNING: videos.json unreadable, rewriting it", file=sys.stderr)
+    for entry in fetched:
+        merged[entry["id"]] = entry
+    index_path.write_text(json.dumps(list(merged.values()), indent=2) + "\n", encoding="utf-8")
     workdir.rmdir()
 
     print(f"\nDone: {len(fetched)}/{len(videos)} transcripts -> {transcripts_dir}")

@@ -164,6 +164,7 @@ because it couldn't source it, and used his 1991 Senate testimony line instead.
 | PDF yields almost no text | It's a scan with no text layer — needs OCR first, or use the EPUB instead |
 | Persona shows 0 books for an author | Expected unless you supplied one — `/coach-refresh <name>` with a copy to hand |
 | Wrong person picked | `/coach-refresh` with a more specific name ("the podcaster", "the founder of X") |
+| Want the entire channel | `fetch_youtube.py --channel <url> --max-videos 0` — resumes if interrupted, and later runs fetch only new uploads |
 | Commands not showing | `/plugin` → verify talk-to-anyone is installed + enabled, then restart Claude Code |
 
 ## Repo layout
@@ -177,6 +178,7 @@ skills/
   coach-switch/  coach-end/  coach-list/  coach-refresh/
 scripts/
   fetch_youtube.py     # channel/search/URLs → long-form videos → clean transcripts
+                       #   --max-videos 0 fetches the whole channel; runs resume
   fetch_books.py       # Gutenberg/URL/local files → PDF·EPUB·TXT → clean book text
   fetch_podcast.py     # iTunes lookup → RSS → serialized-audiobook detection → whisper
 examples/

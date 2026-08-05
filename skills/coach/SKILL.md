@@ -93,10 +93,35 @@ This writes `transcripts/*.txt` + `videos.json` into the persona directory. It t
 minute or two — tell the user the build is running. Zero transcripts (captions
 disabled, region block)? Fine — continue to Step 4; the build does not fail.
 
+**Fetching the whole channel.** `--max-videos 0` removes the cap. Runs skip anything
+already on disk, so an interrupted fetch resumes and a later re-run costs only the new
+uploads. Budget ~1-2 hours for a large channel (Alex Hormozi's is 503 long-form videos,
+216 hours of runtime). Only worth it when the person's substance is spread thin across
+many videos; for most coaches the default 12 plus a targeted `--search` pass is better
+value.
+
 Then READ the transcripts. Read at least 5-6 substantially (plain text, title in the
 header). Mine for: repeated beliefs, named frameworks, signature phrases, how they
 open/close advice, their tone and rhythm. For search-mode results, make sure the
 words you mine are the PERSON's, not the interviewer's.
+
+**Reading a LARGE corpus (roughly 40+ transcripts) — do not just read the first few.**
+Fetching 500 videos and then reading 6 of them wastes the fetch entirely, and the 6 you
+land on are the popularity-sorted ones, which skew to whatever went viral most recently.
+Instead:
+
+1. **Sample across time, not rank.** `videos.json` carries titles and view counts; the
+   filenames carry the video IDs. Deliberately read some old and some recent material —
+   a coach's early videos often teach their system far more plainly than their current
+   ones, which assume the audience already knows it.
+2. **Search the corpus, don't scroll it.** Once the transcripts are on disk they are
+   just text. `grep -ril "value equation" transcripts/` finds every discussion of a
+   framework across 500 files in a second. Do this for each named framework you know
+   they have, then read the files that actually cover it.
+3. **Read for different things.** A handful in full for voice and rhythm; targeted
+   grep-and-read for frameworks, beliefs, and worked examples.
+4. **Say what you sampled.** If you read 25 of 500, the persona's "Built:" line should
+   say so rather than implying the whole corpus informed it.
 
 ## Step 3.5 — Pull their books, when you legitimately can
 
