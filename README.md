@@ -92,9 +92,18 @@ web summaries, so you can always tell which one you're talking to. Three ways in
 | **Public domain** | `--gutenberg "<author>"` searches Project Gutenberg and pulls full texts | Nothing — automatic |
 | **Author-released** | `--url <pdf-url>` for a free copy the author published themselves | The URL |
 | **Your own copy** | `--local <file-or-dir>` extracts PDF / EPUB / TXT from disk | The file |
+| **Their podcast feed** | `fetch_podcast.py --mode books --transcribe` finds audiobooks serialized as episodes | Nothing — automatic |
 
-If an author narrates their own book on their channel or podcast, that's just the
-transcript path pointed at better URLs — `fetch_youtube.py --videos <episode-urls>`.
+**Podcast feeds are the highest-yield source for working authors.** Authors routinely
+serialize their audiobooks as podcast episodes, where no web search will find them.
+`fetch_podcast.py --search "<Name>"` detects them in one API call without downloading
+anything. For Alex Hormozi it finds all four books complete, including the 26-part
+*$100M Lost Chapters* that was never published as a book. Detection is free;
+transcription is opt-in via `--transcribe` because a serialized book can be 20+ hours.
+
+Feed attribution is deliberately strict: the person's name must be the publisher or
+appear in the show title. iTunes returns confident results for people with no podcast
+at all, and inheriting a stranger's voice is worse than finding nothing.
 
 **Not supported, deliberately:** searching shadow libraries (Library Genesis, Anna's
 Archive, Z-Library). If a book isn't public domain, author-released, or supplied by
@@ -169,6 +178,7 @@ skills/
 scripts/
   fetch_youtube.py     # channel/search/URLs → long-form videos → clean transcripts
   fetch_books.py       # Gutenberg/URL/local files → PDF·EPUB·TXT → clean book text
+  fetch_podcast.py     # iTunes lookup → RSS → serialized-audiobook detection → whisper
 examples/
   alex-hormozi/        # real persona built by this pipeline
 ```

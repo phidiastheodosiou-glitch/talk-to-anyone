@@ -37,9 +37,9 @@ Acquisition.com founder").
 Check the cache: if `DATA_DIR/<slug>/persona.md` exists, read it and **skip straight to
 Step 5**. Mention it loaded from cache in one line.
 
-The persona is built from THREE source streams: their spoken content (Steps 2-3, when
-any exists), their long-form written work (Step 3.5, when obtainable), and deep web
-research (Step 4, every build). YouTube is an add-on that sharpens the voice — it is
+The persona is built from THREE source streams: their spoken content (Steps 2-3, plus
+their podcast feed if they have one), their long-form written work (Step 3.5, when
+obtainable), and deep web research (Step 4, every build). YouTube is an add-on that sharpens the voice — it is
 NOT a requirement. Authors, executives, athletes, even historical figures all work.
 Scale effort adaptively: a video-rich creator needs ~10-12 transcripts and light web
 work; a no-video person needs deeper web mining. Aim for a 2-5 minute build either way;
@@ -54,6 +54,11 @@ can (Step 3.5); when you can't, say so in the persona file rather than letting w
 summaries pass as the book.
 
 ## Step 2 — Find their spoken content (skip only for pre-video-era figures)
+
+Two modalities, and most builds should check both: video (below) and podcast. Podcast
+audio is often better material than a YouTube cut — longer, unscripted, less edited —
+and for authors the feed may carry entire books (Step 3.5a2). Use `fetch_podcast.py
+--search "<Name>"` to check; it costs one API call and downloads nothing.
 
 Web-search for their official YouTube channel. **No official channel is normal and NOT
 a fallback case** — most famous people don't run one. Instead, find the best long-form
@@ -109,9 +114,36 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/fetch_books.py" \
 This is a large upgrade for historical personas — Marcus Aurelius built from the actual
 text of *Meditations* is a different coach than one built from articles about it.
 
+**a2) Their own podcast feed — check this for EVERY author.** Authors routinely
+serialize their audiobooks onto their own feed, and nothing on the open web surfaces
+it. Detection is fast and downloads nothing:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/fetch_podcast.py" \
+  --search "<Name>" --out "DATA_DIR/<slug>"
+```
+
+It reports any serialized books it finds, with part counts and gaps. To actually pull
+them, re-run with `--mode books --transcribe` (needs `whisper-cpp` + `ffmpeg` + a
+model; the script prints install instructions if they're missing).
+
+This is the highest-yield step for a working author. For Alex Hormozi it finds all
+four books complete — *$100M Offers*, *$100M Leads*, *$100M Money Models*, and the
+26-part *$100M Lost Chapters*, which was never published as a book at all.
+
+Two cautions. Transcription is slow — budget ~30-45 min per 8 hours of audio, so it
+blows the 2-5 minute build target; tell the user what you found and let them decide
+whether to wait. And a feed only counts when the person's name is in the show title or
+IS the publisher — the script enforces this, because iTunes returns confident matches
+for people who have no podcast (searching "Jeremy Clarkson" yields a farming show by
+someone else). Never override that check.
+
 **b) Author-released free copies** — search "<name> free book/audiobook/PDF". More
-common than you'd expect; many business authors give the text away as lead magnets
-(Hormozi publishes his own audiobooks free at acquisition.com, for instance). Two routes:
+common than you'd expect; many business authors give the text away as lead magnets.
+Note that "free" often means *streaming*, not a file: Hormozi's own free-audiobook
+signup delivers Spotify playlists, which are DRM-protected and out of reach — while
+the same books sit on his podcast feed as plain MP3s (see a2). Check the feed first.
+Two routes:
 
 ```bash
 # A directly-linked PDF/EPUB the author released:
