@@ -38,6 +38,7 @@ Exit codes: 0 = found something, 1 = nothing found, 2 = bad args/missing deps.
 """
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -49,7 +50,17 @@ import urllib.request
 import unicodedata
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from difflib import SequenceMatcher
 from pathlib import Path
+
+# Reuse the sibling fetcher's caption cleaning rather than reimplementing it —
+# its auto-caption dedup handles the rolling-window repetition that naive
+# stripping leaves behind.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from fetch_youtube import clean_vtt
+except ImportError:  # standalone copy of this script
+    clean_vtt = None
 
 ITUNES_SEARCH = "https://itunes.apple.com/search"
 HTTP_TIMEOUT_SECONDS = 90
@@ -57,6 +68,7 @@ USER_AGENT = "talk-to-anyone/1.0 (podcast client; +https://github.com/coltonjose
 DEFAULT_MODEL = Path.home() / ".local/share/whisper/ggml-small.en.bin"
 MAX_TITLE_SLUG_LENGTH = 60
 MIN_AUDIO_BYTES = 100_000
+SUBTITLE_LANG_PREFERENCE = ["en", "en-US", "en-GB", "en-orig"]
 
 # A serialized book announces itself in the episode title. Ordered: first match wins.
 PART_PATTERNS = [
@@ -317,25 +329,128 @@ def pick_voice_episodes(episodes: list[dict], books: list[dict], limit: int) -> 
 # ------------------------------------------------------------- transcription
 
 
-def check_transcribe_deps(model: Path) -> str:
+def check_whisper(model: Path) -> str:
+    """Resolve whisper.cpp, or explain how to get it. Called lazily — a podcast
+    that is fully simulcast on YouTube needs no local transcription at all."""
     whisper = shutil.which("whisper-cli") or shutil.which("whisper-cpp")
     if not whisper:
         fail(
-            "--transcribe needs whisper.cpp. Install it with:\n"
+            "transcribing audio needs whisper.cpp. Install it with:\n"
             "  brew install whisper-cpp ffmpeg\n"
             "then download a model, e.g.:\n"
             "  mkdir -p ~/.local/share/whisper && curl -L -o ~/.local/share/whisper/ggml-small.en.bin \\\n"
             "    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
         )
     if not shutil.which("ffmpeg"):
-        fail("--transcribe needs ffmpeg (brew install ffmpeg)")
+        fail("transcribing audio needs ffmpeg (brew install ffmpeg)")
     if not model.exists():
         fail(f"whisper model not found at {model} — pass --model, or download one (see --help)")
     return whisper
 
 
-def transcribe(whisper: str, model: Path, url: str, workdir: Path) -> str | None:
-    """Download one episode and return its transcript text."""
+# --------------------------------------------------------------- resume cache
+
+
+def cache_path(out_dir: Path, url: str) -> Path:
+    """Stable per-episode cache key. Hashed on the enclosure URL so it survives
+    a feed retitling an episode, which a title-derived name would not."""
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:16]
+    return out_dir / ".podcast-cache" / f"{digest}.txt"
+
+
+# ------------------------------------------------- YouTube simulcast shortcut
+
+
+def _norm_title(title: str) -> str:
+    title = re.sub(r"\|\s*ep\.?\s*\d+\s*$", " ", title, flags=re.I)
+    title = _normalize(title)
+    return re.sub(r"[^a-z0-9 ]+", " ", title).strip()
+
+
+def _duration_seconds(raw: str | None) -> int:
+    raw = (raw or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    total = 0
+    for chunk in raw.split(":"):
+        if not chunk.isdigit():
+            return 0
+        total = total * 60 + int(chunk)
+    return total
+
+
+def find_on_youtube(yt_dlp: str, title: str, duration: int, owner: str) -> str | None:
+    """Locate this episode on the show owner's OWN YouTube channel.
+
+    Worth a search per episode: a hit costs a caption download (seconds), a miss
+    costs local transcription (minutes).
+
+    Three guards, each closing a way this quietly goes wrong:
+
+    * The uploader must be the show's owner. Searching all of YouTube for an
+      audiobook episode surfaces third-party re-uploads of the same book — which
+      are unauthorized copies, and pulling one would launder content this tool
+      otherwise refuses. A simulcast is only equivalent when the author published
+      it themselves.
+    * The title must be near-identical, so a topically similar video can't
+      substitute someone else's words for the coach's.
+    * The duration must agree when the feed publishes one — same title, different
+      runtime usually means a different cut or a compilation.
+    """
+    wanted = _norm_title(title)
+    if len(wanted) < 12:  # too generic to match safely ("Part 3")
+        return None
+    owner_norm = _normalize(owner)
+    if not owner_norm:
+        return None
+    result = subprocess.run(
+        [yt_dlp, "--flat-playlist", "--dump-json", "--playlist-end", "5",
+         f"ytsearch5:{title}"],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+    for line in result.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        uploader = _normalize(entry.get("channel") or entry.get("uploader") or "")
+        if owner_norm not in uploader and uploader not in owner_norm:
+            continue  # someone else's upload of the same material
+        candidate = _norm_title(entry.get("title") or "")
+        if SequenceMatcher(None, wanted, candidate).ratio() < 0.85:
+            continue
+        found = entry.get("duration") or 0
+        if duration and found and abs(found - duration) > max(60, duration * 0.05):
+            continue  # same title, different cut — not the same recording
+        video_id = entry.get("id")
+        if video_id:
+            return f"https://www.youtube.com/watch?v={video_id}"
+    return None
+
+
+def captions_from_youtube(yt_dlp: str, video_url: str, workdir: Path) -> str | None:
+    """Pull captions for a matched video. Free and fast next to transcription."""
+    if clean_vtt is None:
+        return None
+    for stale in workdir.glob("yt.*"):
+        stale.unlink()
+    subprocess.run(
+        [yt_dlp, "--skip-download", "--write-subs", "--write-auto-subs",
+         "--sub-langs", ",".join(SUBTITLE_LANG_PREFERENCE), "--sub-format", "vtt",
+         "-o", str(workdir / "yt"), video_url],
+        capture_output=True, text=True,
+    )
+    files = sorted(workdir.glob("yt.*.vtt"))
+    if not files:
+        return None
+    text = clean_vtt(files[0].read_text(encoding="utf-8", errors="replace"))
+    for stale in workdir.glob("yt.*"):
+        stale.unlink()
+    return text.strip() or None
+
+
+def transcribe_audio(whisper: str, model: Path, url: str, workdir: Path) -> str | None:
+    """Download the episode's MP3 and run it through whisper."""
     mp3, wav, stem = workdir / "ep.mp3", workdir / "ep.wav", workdir / "ep"
     for stale in (mp3, wav, workdir / "ep.txt"):
         stale.unlink(missing_ok=True)
@@ -348,19 +463,65 @@ def transcribe(whisper: str, model: Path, url: str, workdir: Path) -> str | None
         print("    audio too small, skipping", file=sys.stderr)
         return None
     subprocess.run(
-        ["ffmpeg", "-y", "-i", str(mp3), "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)],
-        capture_output=True,
+        ["ffmpeg", "-nostdin", "-y", "-i", str(mp3), "-ar", "16000", "-ac", "1",
+         "-c:a", "pcm_s16le", str(wav)],
+        capture_output=True, stdin=subprocess.DEVNULL,
     )
     subprocess.run(
         [whisper, "-m", str(model), "-f", str(wav), "--output-txt",
          "--output-file", str(stem), "-np", "-nt"],
-        capture_output=True,
+        capture_output=True, stdin=subprocess.DEVNULL,
     )
     out = workdir / "ep.txt"
     text = out.read_text(encoding="utf-8", errors="replace").strip() if out.exists() else ""
     for stale in (mp3, wav, out):
         stale.unlink(missing_ok=True)
     return text or None
+
+
+class EpisodeFetcher:
+    """Resolve an episode to text: cache, then YouTube captions, then whisper."""
+
+    def __init__(self, out_dir: Path, workdir: Path, model: Path, use_youtube: bool,
+                 owner: str = ""):
+        self.out_dir, self.workdir, self.model = out_dir, workdir, model
+        self.owner = owner
+        self.yt_dlp = shutil.which("yt-dlp") if use_youtube else None
+        self.whisper = None  # resolved lazily; may never be needed
+        self.stats = defaultdict(int)
+        if use_youtube and not self.yt_dlp:
+            print("NOTE: yt-dlp not installed — cannot check for YouTube simulcasts, "
+                  "every episode will be transcribed locally", file=sys.stderr)
+
+    def get(self, episode: dict) -> str | None:
+        cached = cache_path(self.out_dir, episode["url"])
+        if cached.exists() and cached.stat().st_size > 0:
+            self.stats["cached"] += 1
+            print("      (cached)")
+            return cached.read_text(encoding="utf-8", errors="replace")
+
+        text = None
+        if self.yt_dlp:
+            match = find_on_youtube(self.yt_dlp, episode["title"],
+                                    _duration_seconds(episode.get("duration")), self.owner)
+            if match:
+                text = captions_from_youtube(self.yt_dlp, match, self.workdir)
+                if text:
+                    self.stats["youtube"] += 1
+                    print(f"      via YouTube captions ({len(text.split()):,} words)")
+
+        if text is None:
+            if self.whisper is None:
+                self.whisper = check_whisper(self.model)
+            text = transcribe_audio(self.whisper, self.model, episode["url"], self.workdir)
+            if text:
+                self.stats["whisper"] += 1
+                print(f"      transcribed ({len(text.split()):,} words)")
+
+        if text:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_text(text, encoding="utf-8")
+        return text
 
 
 def parse_args() -> argparse.Namespace:
@@ -376,6 +537,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-episodes", type=int, default=6, help="Cap for voice episodes (default 6)")
     parser.add_argument("--max-book-parts", type=int, default=60, help="Safety cap per book (default 60)")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="whisper.cpp model path")
+    parser.add_argument("--no-youtube", action="store_true",
+                        help="Skip the YouTube simulcast check and always transcribe audio locally")
     parser.add_argument("--out", required=True, help="Persona directory")
     args = parser.parse_args()
     if not args.search and not args.feed:
@@ -390,6 +553,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     feed_url = args.feed
+    show_owner = args.search or ""
     if not feed_url:
         feeds = find_feeds(args.search)
         if not feeds:
@@ -399,6 +563,7 @@ def main() -> None:
             marker = "->" if i == 0 else "  "
             print(f"  {marker} [{f['confidence']:>9}] {f['name']} by {f['artist']} ({f['episodes']} episodes)")
         feed_url = feeds[0]["feed"]
+        show_owner = feeds[0]["artist"] or args.search or ""
         print(f"Using: {feeds[0]['name']}")
 
     episodes = parse_feed(feed_url)
@@ -432,8 +597,9 @@ def main() -> None:
         print("\n--mode set but --transcribe not passed: wrote manifest only, no audio fetched.")
         return
 
-    whisper = check_transcribe_deps(args.model)
     workdir.mkdir(parents=True, exist_ok=True)
+    fetcher = EpisodeFetcher(out_dir, workdir, args.model,
+                             use_youtube=not args.no_youtube, owner=show_owner)
     books_dir, pod_dir = out_dir / "books", out_dir / "podcast"
 
     if args.mode in ("books", "both"):
@@ -447,10 +613,9 @@ def main() -> None:
             chunks = []
             for i, part in enumerate(parts, 1):
                 print(f"  [{i}/{len(parts)}] {part['title'][:60]}")
-                text = transcribe(whisper, args.model, part["url"], workdir)
+                text = fetcher.get(part)
                 if text:
                     chunks.append(f"\n\n## {part['title']}\n\n{text}")
-                    print(f"      {len(text.split()):,} words")
             if not chunks:
                 continue
             body = "".join(chunks).strip()
@@ -469,16 +634,20 @@ def main() -> None:
         print(f"\n--- {len(picks)} voice episodes ---")
         for i, episode in enumerate(picks, 1):
             print(f"  [{i}/{len(picks)}] {episode['title'][:60]}")
-            text = transcribe(whisper, args.model, episode["url"], workdir)
+            text = fetcher.get(episode)
             if not text:
                 continue
             (pod_dir / f"{slugify(episode['title'])}.txt").write_text(
                 f"# {episode['title']}\n# {feed_url}\n\n{text}\n", encoding="utf-8"
             )
-            print(f"      {len(text.split()):,} words")
 
     shutil.rmtree(workdir, ignore_errors=True)
-    print("\nDone.")
+    s = fetcher.stats
+    print(f"\nDone. {s['youtube']} from YouTube captions, {s['whisper']} transcribed locally, "
+          f"{s['cached']} reused from cache.")
+    if s["youtube"]:
+        print("YouTube captions cost seconds; local transcription costs minutes — "
+              "simulcast shows are much cheaper to build from.")
 
 
 if __name__ == "__main__":
