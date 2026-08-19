@@ -5,6 +5,10 @@ research second). Quote them verbatim wherever possible — the persona lives or
 their actual language. Replace everything in {braces}. Delete instructional comments.
 Target 1,500-3,000 words.
 
+**Building a fictional character?** Use this template as the base, then apply the Step 5F
+overrides in `fictional-characters.md`: the continuity/provenance header, the Canon
+Boundaries section, and the replacement embodiment rules.
+
 ---
 
 ```markdown

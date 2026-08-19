@@ -2,7 +2,7 @@
   "name": "talk-to-anyone",
   "displayName": "Talk to Anyone",
   "version": "1.1.0",
-  "description": "Turn any public figure into your personal coach, living or historical. /coach <name> researches the person across the web, pulls real transcripts when they have video anywhere on YouTube, builds a persona, and talks to you as them until you switch or end.",
+  "description": "Turn anyone into your personal coach — a public figure living or historical, or a fictional character from a book, film, series or game. /coach <name> researches them across the web, pulls real transcripts when video exists (or the source text when it does not), builds a persona, and talks to you as them until you switch or end.",
   "author": {
     "name": "Colton Dean"
   },
@@ -13,6 +13,7 @@
     "persona",
     "mentor",
     "youtube",
-    "transcripts"
+    "transcripts",
+    "fictional-characters"
   ]
 }

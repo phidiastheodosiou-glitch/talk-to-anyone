@@ -135,8 +135,13 @@ def list_popular_videos(yt_dlp: str, channel: str, max_videos: int) -> list[dict
     return []
 
 
-def search_videos(yt_dlp: str, query: str, max_videos: int) -> list[dict]:
-    """Return long-form videos matching a YouTube search (interviews, podcasts, talks)."""
+def search_videos(yt_dlp: str, query: str, max_videos: int, min_duration: int = 480) -> list[dict]:
+    """Return videos matching a YouTube search, dropping anything under min_duration.
+
+    The default floor keeps search mode on substantial spoken content (interviews,
+    podcasts, keynotes) rather than clips. Lower it for corpora that legitimately live
+    in short uploads — scene clips for a fictional character, for instance.
+    """
     print(f"Searching YouTube: {query}")
     entries = run_json_lines(
         [
@@ -153,7 +158,7 @@ def search_videos(yt_dlp: str, query: str, max_videos: int) -> list[dict]:
             continue
         duration = entry.get("duration") or 0
         # Search mode wants substantial spoken content, not clips
-        if duration and duration < 480:
+        if duration and duration < min_duration:
             continue
         videos.append(
             {
@@ -259,6 +264,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-videos", type=int, default=12,
                         help="How many videos to pull per source (default 12; use 0 for ALL — "
                              "expect ~1-2 hours on a large channel, and see --refetch)")
+    parser.add_argument("--min-duration", type=int, default=480,
+                        help="Drop --search results shorter than this many seconds (default 480). "
+                             "Lower it when the material really is short — e.g. 120 for film scene "
+                             "clips when building a fictional character")
     parser.add_argument("--refetch", action="store_true",
                         help="Re-download transcripts that are already on disk (default: skip them, "
                              "so re-running only picks up new uploads and an interrupted run resumes)")
@@ -268,6 +277,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("provide --channel, --search, and/or --videos")
     if args.max_videos < 0:
         parser.error("--max-videos must be >= 0 (0 means no limit)")
+    if args.min_duration < 0:
+        parser.error("--min-duration must be >= 0")
     return args
 
 
@@ -298,7 +309,7 @@ def main() -> None:
             print("WARNING: could not list channel videos (region block or layout change?)", file=sys.stderr)
     if args.search:
         seen_ids = {v["id"] for v in videos}
-        videos.extend(v for v in search_videos(yt_dlp, args.search, args.max_videos) if v["id"] not in seen_ids)
+        videos.extend(v for v in search_videos(yt_dlp, args.search, args.max_videos, args.min_duration) if v["id"] not in seen_ids)
     for url in args.videos:
         video_id_match = re.search(r"(?:v=|youtu\.be/|/shorts/)([A-Za-z0-9_-]{11})", url)
         if not video_id_match:

@@ -8,7 +8,7 @@
     {
       "name": "talk-to-anyone",
       "source": "./",
-      "description": "Turn any public figure into your personal coach, living or historical. /coach <name> researches them across the web, pulls real transcripts from YouTube, their books (public domain, author-released, or your own copies), and their podcast feed \u2014 including audiobooks serialized as episodes \u2014 then talks to you as them. Fork of coltonjosephdean-rgb/talk-to-anyone.",
+      "description": "Turn anyone into your personal coach \u2014 a public figure living or historical, or a fictional character from a book, film, series or game. /coach <name> researches them across the web, pulls real transcripts from YouTube, their books (public domain, author-released, or your own copies), and their podcast feed \u2014 including audiobooks serialized as episodes \u2014 then talks to you as them. Fork of coltonjosephdean-rgb/talk-to-anyone.",
       "version": "1.1.0",
       "author": {
         "name": "Colton Dean"

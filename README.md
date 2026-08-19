@@ -2,13 +2,15 @@
 
 ![Talk to Anyone — Claude Code plugin](assets/social-preview.png)
 
-**Turn any person on earth into your personal coach, inside Claude Code.** Type `/coach` and a name. It researches them — their real interviews, books, transcripts, writings — and then you're talking to them.
+**Turn anyone into your personal coach, inside Claude Code.** Type `/coach` and a name. It researches them — their real interviews, books, transcripts, writings, or a character's actual dialogue — and then you're talking to them.
 
 ```
-/coach alex hormozi     → business coaching from Alex Hormozi
-/coach andrew huberman  → health protocols from Andrew Huberman
-/coach warren buffett   → no YouTube channel needed — interviews + shareholder letters
-/coach marcus aurelius  → no video at all — built from his actual writings
+/coach alex hormozi      → business coaching from Alex Hormozi
+/coach andrew huberman   → health protocols from Andrew Huberman
+/coach warren buffett    → no YouTube channel needed — interviews + shareholder letters
+/coach marcus aurelius   → no video at all — built from his actual writings
+/coach sherlock holmes   → fictional — built from Conan Doyle's text, not a vibe
+/coach dominic toretto   → fictional — built from screen dialogue across the films
 ```
 
 When you name a person, the plugin researches them across the web — interviews,
@@ -18,7 +20,8 @@ of them speaking** (no API keys). Everything gets distilled into a persona file:
 voice, beliefs, named frameworks, signature phrases, and how they actually give
 advice. Then Claude *becomes* them for the rest of the conversation — answers come in
 their voice, grounded in what they actually teach. Works for anyone with a public
-footprint, living or historical.
+footprint, living or historical — and for fictional characters, whose corpus is their
+source text and screen dialogue instead. See [Fictional characters](#fictional-characters).
 
 Personas are cached locally, so the first `/coach alex hormozi` takes a couple of
 minutes and every one after loads instantly.
@@ -63,7 +66,9 @@ If the short names collide with another plugin, use the namespaced form:
 ## How it works
 
 1. **Identify** — web-searches the name (handles misspellings: "alex formosi" →
-   Alex Hormozi) and maps their public footprint.
+   Alex Hormozi), settles real vs. fictional, and maps their public footprint. Fictional
+   characters branch here into their own source route
+   ([below](#fictional-characters)).
 2. **Pull spoken content** — when any exists: their own channel's popular videos, or
    long-form interviews/podcasts/keynotes OF them on any channel (`--search` mode).
    `scripts/fetch_youtube.py` downloads captions with yt-dlp (manual subs preferred,
@@ -117,6 +122,30 @@ Archive, Z-Library). If a book isn't public domain, author-released, or supplied
 you, the build treats it as unavailable, falls back to web research for its ideas, and
 labels it as such in the persona file rather than passing a summary off as the book.
 
+## Fictional characters
+
+`/coach sherlock holmes` works, and it isn't a costume. A character's corpus is just a
+different set of sources, so the build swaps steps 2-4 for:
+
+| Source | How |
+| --- | --- |
+| **Public-domain source text** | `fetch_books.py --gutenberg "Sherlock Holmes"` — the actual stories, read for dialogue. Covers Holmes, Ahab, Elizabeth Bennet, Dracula, everyone in Shakespeare… |
+| **Screen dialogue** | `fetch_youtube.py --search "<Character> best scenes" --min-duration 120` — official scene uploads, captions are the real lines |
+| **Quote archives + wikis** | Verified lines (cross-checked — film misquotation is rampant) and canon chronology |
+
+Two things the build refuses to do, because they're how these personas usually fail:
+
+- **The character is not the performer.** Dominic Toretto's persona contains nothing
+  from Vin Diesel's interviews. If you want the actor, that's a separate `/coach`.
+- **The canon is closed.** No invented plot events, relatives, or quotes. Past what's on
+  the page or screen, the character reasons from their code and says so in voice rather
+  than manufacturing a memory. The persona file carries an explicit **Canon Boundaries**
+  section drawing that line.
+
+Villains and outlaws are fair game as voices, not as instruction: the persona keeps the
+nerve and drops the crime, and answers the way the character actually would about what
+it cost them.
+
 ## What it feels like
 
 Real output from a built persona, not a mockup — `/coach alex hormozi`, first message:
@@ -140,6 +169,7 @@ videos.
 | [Alex Hormozi](examples/alex-hormozi/persona.md) | Own YouTube channel | 12 videos, ~59k transcript words |
 | [Warren Buffett](examples/warren-buffett/persona.md) | **No channel of his own** | 6 interviews from other channels (~69k words) + his shareholder letters |
 | [Marcus Aurelius](examples/marcus-aurelius/persona.md) | **No video ever existed** | Meditations full text, every quote cited by book.section |
+| [Dominic Toretto](examples/dominic-toretto/persona.md) | **Fictional character** | Screen dialogue across the saga + quote archives, canon boundaries marked |
 
 ## How this repo was built
 
@@ -154,7 +184,8 @@ because it couldn't source it, and used his 1991 Senate testimony line instead.
 ## Honest limits
 
 - **It's an emulation, not the person.** Built only from public content; it will say so
-  if you ask. It won't invent personal facts or private opinions.
+  if you ask. It won't invent personal facts or private opinions — or, for a character,
+  canon that isn't there.
 - **Not professional advice.** A Huberman persona repeating his public protocols is not
   your doctor; a Hormozi persona is not your fiduciary.
 - Voice fidelity scales with source quality: video-rich people sound sharpest,
@@ -171,6 +202,9 @@ because it couldn't source it, and used his 1991 Senate testimony line instead.
 | PDF yields almost no text | It's a scan with no text layer — needs OCR first, or use the EPUB instead |
 | Persona shows 0 books for an author | Expected unless you supplied one — `/coach-refresh <name>` with a copy to hand |
 | Wrong person picked | `/coach-refresh` with a more specific name ("the podcaster", "the founder of X") |
+| Got the actor, wanted the character (or vice versa) | Name it explicitly — `/coach the character dominic toretto` — they're separate personas |
+| Wrong version of a character | Say which continuity: `/coach book sherlock holmes` vs `/coach bbc sherlock`; each caches separately |
+| Character scene clips not fetched | Search mode drops anything under 8 min — pass `--min-duration 120`, or give scene URLs via `--videos` |
 | Want the entire channel | `fetch_youtube.py --channel <url> --max-videos 0` — resumes if interrupted, and later runs fetch only new uploads |
 | Commands not showing | `/plugin` → verify talk-to-anyone is installed + enabled, then restart Claude Code |
 
@@ -181,7 +215,7 @@ because it couldn't source it, and used his 1991 Senate testimony line instead.
   plugin.json          # plugin manifest
   marketplace.json     # this repo doubles as its own marketplace
 skills/
-  coach/               # main skill + persona template
+  coach/               # main skill + persona template + fictional-character route
   coach-switch/  coach-end/  coach-list/  coach-refresh/
 scripts/
   fetch_youtube.py     # channel/search/URLs → long-form videos → clean transcripts
